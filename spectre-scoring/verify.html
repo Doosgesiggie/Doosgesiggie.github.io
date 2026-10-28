@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en" data-rescue="0"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spectre has moved</title>
+<meta name="robots" content="noindex">
+<noscript><meta http-equiv="refresh" content="0; url=https://spectretactical.github.io/spectre-scoring/verify.html"></noscript>
+<link rel="canonical" href="https://spectretactical.github.io/spectre-scoring/verify.html">
+
+<style>body{font:16px/1.45 system-ui,sans-serif;max-width:560px;margin:2em auto;padding:0 1em;color:#111}h1{font-size:1.3em}
+.box{border:2px solid #c00;border-radius:8px;padding:1em;margin:1em 0}button,.btn{display:block;width:100%;box-sizing:border-box;font-size:1.05em;padding:.8em;margin:.5em 0;border-radius:6px;border:1px solid #333;background:#111;color:#fff;text-align:center;text-decoration:none}
+.sec{background:#fff;color:#111}small{color:#555;word-break:break-all}</style>
+</head><body>
+<h1>Spectre has moved – your match data is on the old app: back it up first</h1>
+<p>The new address is <a id="go" href="https://spectretactical.github.io/spectre-scoring/verify.html">spectretactical.github.io</a>.</p>
+<div id="rescue" class="box" hidden>
+  <p><b id="what">This phone still holds Spectre data on the old address.</b> The new app cannot see it. Download a backup, then open the new app and use <b>Match → Restore…</b> (scoring) or <b>Import</b> (designer).</p>
+  <button id="bScoring" hidden>1. Download match backup</button>
+  <button id="bDesigner" hidden>1. Download Stage Designer files</button>
+  <p id="done" hidden>Saved. Keep the file, then continue.</p>
+  <a id="go2" class="btn sec" href="https://spectretactical.github.io/spectre-scoring/verify.html">2. Open the new app</a>
+  <p><button id="bRaw" class="sec">Also save everything (raw copy, for support)</button></p>
+  <p><small>Nothing is deleted from this phone. You can come back here any time.</small></p>
+</div>
+<p id="auto" hidden>Taking you there now…</p>
+<p><small id="tgt"></small></p>
+<noscript><p><a href="https://spectretactical.github.io/spectre-scoring/verify.html">Continue to the new address</a></p></noscript>
+<script>/* Spectre placeholder on the OLD origin. Same origin as the old app, so it can still read the
+   phone's stranded localStorage and IndexedDB. It never deletes local data. */
+(function(){
+  var NEW = "https://spectretactical.github.io";
+  var OLD_USER = /^\/[^\/]*/;                      // "/spectre-scoring" stays, host changes
+  var target = NEW + location.pathname + location.search + location.hash;
+  var RESCUE = document.documentElement.getAttribute("data-rescue") === "1";
+  function $(id){ return document.getElementById(id); }
+  function ls(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+  function keys(){ var a = []; try{ for(var i = 0; i < localStorage.length; i++) a.push(localStorage.key(i)); }catch(e){} return a; }
+  function spectreKeys(){ return keys().filter(function(k){ return /^(spectre|ss-)/i.test(k); }); }
+  function json(k){ try{ return JSON.parse(ls(k) || "null"); }catch(e){ return null; } }
+  function stamp(){ return new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-"); }
+  function download(name, text){
+    var blob = new Blob([text], { type: "application/json" });
+    try{
+      var f = new File([blob], name, { type: "application/json" });
+      if(navigator.canShare && navigator.canShare({ files: [f] }) && /iPhone|iPad|Android/i.test(navigator.userAgent))
+        return navigator.share({ files: [f], title: name }).catch(function(){ save(blob, name); });
+    }catch(e){}
+    save(blob, name);
+  }
+  function save(blob, name){ var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 4000); }
+  function sigsFromIDB(){
+    return new Promise(function(res){
+      var out = {};
+      try{
+        var rq = indexedDB.open("spectreScoringSigs");
+        rq.onupgradeneeded = function(){ try{ rq.transaction.abort(); }catch(e){} res(out); };   // DB never existed: do not create it
+        rq.onerror = function(){ res(out); };
+        rq.onsuccess = function(){
+          var db = rq.result;
+          if(!db.objectStoreNames.contains("sigs")){ db.close(); return res(out); }
+          var st = db.transaction("sigs", "readonly").objectStore("sigs"), c = st.openCursor();
+          c.onsuccess = function(){ var cur = c.result; if(cur){ out[cur.key] = cur.value; cur.continue(); } else { db.close(); res(out); } };
+          c.onerror = function(){ db.close(); res(out); };
+        };
+      }catch(e){ res(out); }
+    });
+  }
+  /* What is stranded on this phone */
+  var S = json("spectreScoring.v1");
+  var hasScoring = !!(S && S.app === "spectre-scoring" && ((S.shooters && S.shooters.length) || (S.scores && Object.keys(S.scores).length)));
+  var D = json("spectreStageDesigner.v1"), LIB = json("spectreStageDesigner.library"), BAYS = json("spectreStageDesigner.bays");
+  var hasDesigner = !!((D && D.stages && D.stages.length) || (LIB && LIB.length) || (BAYS && BAYS.length));
+  var any = spectreKeys().length > 0;
+
+  function scoringBackup(){
+    return sigsFromIDB().then(function(sigs){
+      keys().forEach(function(k){ var m = /^spectreScoring\.sig\.(.+)$/.exec(k); if(m && !sigs[m[1]]) sigs[m[1]] = ls(k); });
+      var dev = S.device || {};
+      var b = { app: "spectre-scoring", kind: "backup", version: S.version || 1, appVersion: "moved-rescue",
+        matchId: S.matchId, match: S.match, from: { id: dev.id || "", name: dev.name || "" }, createdAt: new Date().toISOString(),
+        packId: "rescue-" + Date.now().toString(36), state: S, undo: json("spectreScoring.undo") || [], sigs: sigs };
+      var nm = ((S.match && S.match.name) || "match").replace(/[^a-z0-9]+/gi, "-").toLowerCase().slice(0, 40);
+      download("spectre-backup-" + nm + "-" + stamp() + ".json", JSON.stringify(b));
+    });
+  }
+  function designerFiles(){
+    if(D && D.stages && D.stages.length) download("spectre-match-designer-" + stamp() + ".json", JSON.stringify({ app: "spectre-stage-designer", version: D.version || 2, exportedAt: new Date().toISOString(), match: D.match, stages: D.stages, settings: D.settings }, null, 1));
+    if(LIB && LIB.length) setTimeout(function(){ download("spectre-stage-library-" + stamp() + ".json", JSON.stringify({ app: "spectre-stage-designer", kind: "library", version: 2, exportedAt: new Date().toISOString(), entries: LIB }, null, 1)); }, 800);
+    if(BAYS && BAYS.length) setTimeout(function(){ download("spectre-bays-" + stamp() + ".json", JSON.stringify({ app: "spectre-stage-designer", kind: "bays", version: 2, bays: BAYS }, null, 1)); }, 1600);
+  }
+  function rawDump(){
+    var o = { app: "spectre-raw-dump", origin: location.origin, createdAt: new Date().toISOString(), localStorage: {} };
+    spectreKeys().forEach(function(k){ o.localStorage[k] = ls(k); });
+    return sigsFromIDB().then(function(s){ o.sigs = s; download("spectre-everything-" + stamp() + ".json", JSON.stringify(o)); });
+  }
+
+  /* Page wiring */
+  $("go").href = target; $("go2").href = target; $("tgt").textContent = target;
+  var stranded = hasScoring || hasDesigner;
+  if(stranded || (RESCUE && any)){
+    $("rescue").hidden = false;
+    $("bScoring").hidden = !hasScoring; $("bDesigner").hidden = !hasDesigner;
+    if(hasScoring) $("what").textContent = "This phone still holds the match “" + ((S.match && S.match.name) || "") + "” (" + ((S.shooters || []).length) + " shooters).";
+    else if(hasDesigner) $("what").textContent = "This browser still holds Stage Designer work (match, library or bays).";
+    $("bScoring").onclick = function(){ scoringBackup().then(function(){ $("done").hidden = false; }); };
+    $("bDesigner").onclick = function(){ designerFiles(); $("done").hidden = false; };
+    $("bRaw").onclick = function(){ rawDump(); };
+    return;                                         // never auto-redirect while data is stranded here
+  }
+  $("auto").hidden = false;
+  location.replace(target);
+})();
+</script>
+</body></html>
